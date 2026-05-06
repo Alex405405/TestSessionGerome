@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Casse-brique Blackberry</title>
+  <style>
+    :root {
+      --bg: #101318;
+      --screen: #d8e2c8;
+      --dark: #2a2f26;
+      --mid: #4b5743;
+      --light: #7a8f6f;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: radial-gradient(circle at top, #1a1f29, var(--bg));
+      font-family: "Courier New", Courier, monospace;
+      color: var(--screen);
+    }
+
+    .phone {
+      width: min(92vw, 430px);
+      border-radius: 18px;
+      background: linear-gradient(180deg, #21252d, #171b22);
+      border: 2px solid #0e1117;
+      box-shadow: 0 20px 45px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+      padding: 18px;
+    }
+
+    .screen {
+      background: var(--screen);
+      border-radius: 8px;
+      padding: 10px;
+      border: 4px solid #111;
+      box-shadow: inset 0 0 0 2px #2f2f2f;
+    }
+
+    #game {
+      width: 100%;
+      aspect-ratio: 4 / 5;
+      display: block;
+      background: #cad8b6;
+      image-rendering: pixelated;
+      border: 2px solid #293222;
+    }
+
+    .hud {
+      margin-top: 8px;
+      color: #131812;
+      font-size: 0.9rem;
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .keys {
+      margin-top: 12px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+
+    button {
+      background: #2a303a;
+      color: #d9dee8;
+      border: 1px solid #11161f;
+      border-radius: 8px;
+      padding: 10px;
+      font: inherit;
+      cursor: pointer;
+      transition: transform 0.05s ease;
+    }
+
+    button:active { transform: translateY(1px) scale(0.99); }
+  </style>
+</head>
+<body>
+  <main class="phone">
+    <section class="screen">
+      <canvas id="game" width="320" height="400" aria-label="Casse-brique"></canvas>
+      <div class="hud">
+        <span id="score">Score: 0</span>
+        <span id="lives">Vies: 3</span>
+        <span>Entrée pour lancer</span>
+      </div>
+    </section>
+    <div class="keys">
+      <button data-dir="left">◀ Gauche</button>
+      <button id="start">⏎ Lancer</button>
+      <button data-dir="right">Droite ▶</button>
+    </div>
+  </main>
+
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const scoreEl = document.getElementById('score');
+    const livesEl = document.getElementById('lives');
+
+    const game = {
+      running: false,
+      score: 0,
+      lives: 3,
+      paddle: { x: 130, y: 370, w: 60, h: 8, speed: 5 },
+      ball: { x: 160, y: 360, r: 5, vx: 2.6, vy: -2.6, stuck: true },
+      cols: 8,
+      rows: 5,
+      brickW: 34,
+      brickH: 12,
+      gap: 4,
+      offsetX: 12,
+      offsetY: 24,
+      bricks: []
+    };
+
+    function resetBricks() {
+      game.bricks = [];
+      for (let row = 0; row < game.rows; row++) {
+        for (let col = 0; col < game.cols; col++) {
+          game.bricks.push({
+            x: game.offsetX + col * (game.brickW + game.gap),
+            y: game.offsetY + row * (game.brickH + game.gap),
+            alive: true
+          });
+        }
+      }
+    }
+
+    function resetBall() {
+      game.ball.stuck = true;
+      game.ball.x = game.paddle.x + game.paddle.w / 2;
+      game.ball.y = game.paddle.y - game.ball.r - 1;
+      game.ball.vx = (Math.random() > 0.5 ? 1 : -1) * 2.6;
+      game.ball.vy = -2.6;
+    }
+
+    function drawPixelRect(x, y, w, h, color) {
+      ctx.fillStyle = color;
+      ctx.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h));
+    }
+
+    function draw() {
+      ctx.fillStyle = '#cad8b6';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      drawPixelRect(0, 0, canvas.width, 16, '#a9bb92');
+
+      for (const b of game.bricks) {
+        if (!b.alive) continue;
+        drawPixelRect(b.x, b.y, game.brickW, game.brickH, '#4b5743');
+        drawPixelRect(b.x + 1, b.y + 1, game.brickW - 2, game.brickH - 2, '#7a8f6f');
+      }
+
+      drawPixelRect(game.paddle.x, game.paddle.y, game.paddle.w, game.paddle.h, '#2a2f26');
+
+      ctx.fillStyle = '#1f231a';
+      ctx.beginPath();
+      ctx.arc(game.ball.x, game.ball.y, game.ball.r, 0, Math.PI * 2);
+      ctx.fill();
+
+      if (!game.running) {
+        ctx.fillStyle = '#2a2f26';
+        ctx.font = '14px Courier New';
+        ctx.fillText('Appuie sur Entrée', 86, 210);
+      }
+    }
+
+    function update() {
+      if (game.ball.stuck) {
+        game.ball.x = game.paddle.x + game.paddle.w / 2;
+        game.ball.y = game.paddle.y - game.ball.r - 1;
+      } else {
+        game.ball.x += game.ball.vx;
+        game.ball.y += game.ball.vy;
+      }
+
+      if (game.ball.x <= game.ball.r || game.ball.x >= canvas.width - game.ball.r) game.ball.vx *= -1;
+      if (game.ball.y <= game.ball.r + 16) game.ball.vy *= -1;
+
+      if (game.ball.y > canvas.height + game.ball.r) {
+        game.lives -= 1;
+        livesEl.textContent = `Vies: ${game.lives}`;
+        if (game.lives <= 0) {
+          game.running = false;
+          game.score = 0;
+          game.lives = 3;
+          scoreEl.textContent = `Score: ${game.score}`;
+          livesEl.textContent = `Vies: ${game.lives}`;
+          resetBricks();
+        }
+        resetBall();
+      }
+
+      if (
+        game.ball.x + game.ball.r > game.paddle.x &&
+        game.ball.x - game.ball.r < game.paddle.w + game.paddle.x &&
+        game.ball.y + game.ball.r > game.paddle.y &&
+        game.ball.y - game.ball.r < game.paddle.y + game.paddle.h &&
+        game.ball.vy > 0
+      ) {
+        const hit = (game.ball.x - (game.paddle.x + game.paddle.w / 2)) / (game.paddle.w / 2);
+        game.ball.vx = hit * 3;
+        game.ball.vy *= -1;
+      }
+
+      for (const b of game.bricks) {
+        if (!b.alive) continue;
+        if (
+          game.ball.x + game.ball.r > b.x &&
+          game.ball.x - game.ball.r < b.x + game.brickW &&
+          game.ball.y + game.ball.r > b.y &&
+          game.ball.y - game.ball.r < b.y + game.brickH
+        ) {
+          b.alive = false;
+          game.ball.vy *= -1;
+          game.score += 10;
+          scoreEl.textContent = `Score: ${game.score}`;
+          break;
+        }
+      }
+
+      if (game.bricks.every((b) => !b.alive)) {
+        resetBricks();
+        resetBall();
+        game.running = false;
+      }
+    }
+
+    function loop() {
+      if (game.running) update();
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    function move(dir) {
+      const delta = dir === 'left' ? -game.paddle.speed * 2 : game.paddle.speed * 2;
+      game.paddle.x = Math.max(0, Math.min(canvas.width - game.paddle.w, game.paddle.x + delta));
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowLeft') move('left');
+      if (e.key === 'ArrowRight') move('right');
+      if (e.key === 'Enter') {
+        game.running = true;
+        game.ball.stuck = false;
+      }
+    });
+
+    for (const btn of document.querySelectorAll('[data-dir]')) {
+      btn.addEventListener('click', () => move(btn.dataset.dir));
+    }
+
+    document.getElementById('start').addEventListener('click', () => {
+      game.running = true;
+      game.ball.stuck = false;
+    });
+
+    resetBricks();
+    resetBall();
+    loop();
+  </script>
+</body>
+</html>
